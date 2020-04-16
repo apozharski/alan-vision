@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.0)
 
 # set the project name
 project(alan-vision VERSION 0.1)
+
+# Compile to C++14
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 # required packages
 find_package(OpenCV REQUIRED)
 
