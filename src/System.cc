@@ -3,6 +3,8 @@
 #include <opencv2/features2d.hpp>
 #include <iostream>
 #include "System.hpp"
+#include <thread>
+#include <unistd.h>
 namespace alan {
 
 AlanVisionSystem::AlanVisionSystem(int l_camera_id, int r_camera_id)
@@ -18,6 +20,8 @@ AlanVisionSystem::AlanVisionSystem(int l_camera_id, int r_camera_id)
   {
     std::cout << "Right camera failed to open"<< std::endl;
   }
+
+  tFrameGrabber = new std::thread(AlanVisionSystem::FrameGrabber, this);
 }
 
 cv::Mat AlanVisionSystem::testFrames()
@@ -89,4 +93,19 @@ bool AlanVisionSystem::grabFramePair()
   return left_camera.grab() & right_camera.grab();
 }
 
+void AlanVisionSystem::setFPS(double FPS)
+{
+  left_camera.set(cv::CAP_PROP_FPS, FPS);
+  right_camera.set(cv::CAP_PROP_FPS, FPS);
+}
+void AlanVisionSystem::FrameGrabber(AlanVisionSystem* system)
+{
+  for(;;)
+  {
+    bool grabbed = system->grabFramePair();
+    if(!grabbed)
+      exit(EXIT_FAILURE);
+    usleep(100000);// TODO Make this dynamic based on framerate. (currently, this is dumb).
+  }
+}
 }
