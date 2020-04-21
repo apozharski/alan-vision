@@ -29,7 +29,6 @@ cv::Mat AlanVisionSystem::testFrames()
   return stereo_frame;
 }
 
-
 cv::Mat AlanVisionSystem::kpOnFrames()
 {
   // Initialize required structures
@@ -68,6 +67,26 @@ cv::Mat AlanVisionSystem::kpOnFrames()
   drawMatches(left_frame, lmatched, right_frame, rmatched, matched, stereo_frame);
 
   return stereo_frame;
+}
+
+void AlanVisionSystem::initSlam(const string &orb_vocab_path,
+                                  const string &orb_settings_path,
+                                  const bool view = false)
+{
+  SLAM = new ORB_SLAM2::System(orb_vocab_path, orb_settings_path, ORB_SLAM2::System::STEREO, view);
+}
+
+std::pair<cv::Mat, cv::Mat> AlanVisionSystem::retrieveFramePair()
+{
+  std::pair<cv::Mat, cv::Mat> frame_pair;
+  left_camera.retrieve(frame_pair.first);
+  right_camera.retrieve(frame_pair.second);
+  return frame_pair;
+}
+
+bool AlanVisionSystem::grabFramePair()
+{
+  return left_camera.grab() & right_camera.grab();
 }
 
 }
