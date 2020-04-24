@@ -5,6 +5,8 @@
 #include "System.hpp"
 #include <thread>
 #include <unistd.h>
+#include <tuple>
+#include <chrono>
 namespace alan {
 
 AlanVisionSystem::AlanVisionSystem(int l_camera_id, int r_camera_id)
@@ -80,17 +82,23 @@ void AlanVisionSystem::initSlam(const string &orb_vocab_path,
   SLAM = new ORB_SLAM2::System(orb_vocab_path, orb_settings_path, ORB_SLAM2::System::STEREO, view);
 }
 
-std::pair<cv::Mat, cv::Mat> AlanVisionSystem::retrieveFramePair()
+std::tuple<cv::Mat, cv::Mat, double> AlanVisionSystem::retrieveFramePair()
 {
-  std::pair<cv::Mat, cv::Mat> frame_pair;
-  left_camera.retrieve(frame_pair.first);
-  right_camera.retrieve(frame_pair.second);
-  return frame_pair;
+  std::tuple<cv::Mat, cv::Mat,double> frames;
+  left_camera.retrieve(std::get<0>(frames));
+  right_camera.retrieve(std::get<1>(frames));
+  std::get<2>(frames) = timestamp;
+  return frames;
 }
 
 bool AlanVisionSystem::grabFramePair()
 {
-  return left_camera.grab() & right_camera.grab();
+  bool success = left_camera.grab() & right_camera.grab();
+  std::chrono::time_point<std::chrono::high_resolution_clock>
+    tp = std::chrono::high_resolution_clock::now();
+  double micros = tp.time_since_epoch().count();
+  setLastTime(micros);
+  return success;
 }
 
 void AlanVisionSystem::setFPS(double FPS)
@@ -107,5 +115,15 @@ void AlanVisionSystem::FrameGrabber(AlanVisionSystem* system)
       exit(EXIT_FAILURE);
     usleep(100000);// TODO Make this dynamic based on framerate. (currently, this is dumb).
   }
+}
+
+void AlanVisionSystem::setLastTime(double ts)
+{
+  timestamp = ts;
+}
+
+cv::Mat AlanVisionSystem::TrackStereo(cv::Mat left, cv::Mat right, double ts)
+{
+  return SLAM->TrackStereo(left, right, ts);
 }
 }

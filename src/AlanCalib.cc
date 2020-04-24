@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <atomic>
-
+#include <tuple>
 // TODO: Should be done better.
 // Global System 
 alan::AlanVisionSystem av_system(2,0);
@@ -34,8 +34,8 @@ void frameGrabLoop()
 int main(int, char**)
 {
   // Setup frame data structires
-  std::pair<cv::Mat, cv::Mat> frame_pair;
-  std::vector<std::pair<cv::Mat, cv::Mat>> frames;
+  std::tuple<cv::Mat, cv::Mat, double> frame_pair;
+  std::vector<std::tuple<cv::Mat, cv::Mat, double>> frames;
 
   // TODO: Make this dynamic
   // Get board specs
@@ -47,8 +47,8 @@ int main(int, char**)
   av_system.setFPS(10);
 
   // Setup grabber 
-  std::thread grabber(frameGrabLoop);
-  grabber.detach();
+  //std::thread grabber(frameGrabLoop);
+  //grabber.detach();
 
   // Capture images
   for(;;)
@@ -56,8 +56,8 @@ int main(int, char**)
     if(cv::waitKey(0) == 27)
       break;
     frame_pair = av_system.retrieveFramePair();
-    cv::imshow("Left", frame_pair.first);
-    cv::imshow("Right", frame_pair.second);
+    cv::imshow("Left", std::get<0>(frame_pair));
+    cv::imshow("Right", std::get<1>(frame_pair));
     frames.push_back(frame_pair);
   }
   
@@ -74,8 +74,8 @@ int main(int, char**)
   {
     // Convert to gray
     cv::Mat lgray, rgray;
-    cv::cvtColor(calib_pair.first, lgray, CV_BGR2GRAY);
-    cv::cvtColor(calib_pair.second, rgray, CV_BGR2GRAY);
+    cv::cvtColor(std::get<0>(calib_pair), lgray, CV_BGR2GRAY);
+    cv::cvtColor(std::get<1>(calib_pair), rgray, CV_BGR2GRAY);
     // Find chessboard corners
     lfound = cv::findChessboardCorners(lgray, board_size, lcorners,
                                        CV_CALIB_CB_ADAPTIVE_THRESH);
@@ -93,7 +93,7 @@ int main(int, char**)
     {
       cv::cornerSubPix(lgray, lcorners, cv::Size(5, 5), cv::Size(-1, -1),
                        cv::TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.5));
-      cv::drawChessboardCorners(calib_pair.first, board_size, lcorners, lfound);
+      cv::drawChessboardCorners(std::get<0>(calib_pair), board_size, lcorners, lfound);
       left_image_points.push_back(lcorners);
       left_object_points.push_back(obj);
     }
@@ -101,7 +101,7 @@ int main(int, char**)
     {
       cv::cornerSubPix(rgray, rcorners, cv::Size(5, 5), cv::Size(-1, -1),
                        cv::TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.5));
-      cv::drawChessboardCorners(calib_pair.second, board_size, rcorners, rfound);
+      cv::drawChessboardCorners(std::get<1>(calib_pair), board_size, rcorners, rfound);
       right_image_points.push_back(rcorners);
       right_object_points.push_back(obj);
     }
@@ -124,28 +124,40 @@ int main(int, char**)
   cv::Mat D1, D2;
   int mono_flag = 0;
   mono_flag |= cv::CALIB_RATIONAL_MODEL;
-  double lrms = cv::calibrateCamera(left_object_points, left_image_points, frame_pair.first.size(),
+  double lrms = cv::calibrateCamera(left_object_points, left_image_points, std::get<0>(frame_pair).size(),
                                     K1, D1, rvec1, tvec1, mono_flag);
   std::cout << "left rms" << lrms << std::endl;
-  double rrms = cv::calibrateCamera(right_object_points, right_image_points, frame_pair.first.size(),
+  double rrms = cv::calibrateCamera(right_object_points, right_image_points, std::get<0>(frame_pair).size(),
                                     K2, D2, rvec2, tvec2, mono_flag);
   std::cout << "right rms" << rrms << std::endl;
   int stereo_flag = 0;
   stereo_flag |= cv::CALIB_RATIONAL_MODEL;
   double rms = cv::stereoCalibrate(shared_object_points, shared_left_image_points, shared_right_image_points,
-                                   K1, D1, K2, D2, frame_pair.first.size(), R, T, E, F, stereo_flag);
+                                   K1, D1, K2, D2, std::get<0>(frame_pair).size(), R, T, E, F, stereo_flag);
   //cv::TermCriteria(3, 12, 0)
                                  
   std::cout << "rms" << rms << std::endl;
 
   cv::Mat R1, R2, P1, P2, Q;
-  cv::stereoRectify(K1, D1, K2, D2, frame_pair.first.size(), R, T, R1, R2, P1, P2, 
-                    Q, CV_CALIB_ZERO_DISPARITY, -1,frame_pair.first.size());
+  cv::stereoRectify(K1, D1, K2, D2, std::get<0>(frame_pair).size(), R, T, R1, R2, P1, P2, 
+                    Q, CV_CALIB_ZERO_DISPARITY, -1,std::get<0>(frame_pair).size());
 
   std::cout << "Q" << Q << std::endl;
 
 
-  cv::FileStorage fs("test.yml", cv::FileStorage::WRITE);
+  cv::FileStorage fs("out.yml", cv::FileStorage::WRITE);
+
+
+
+  fs << "Camera fx" << P1.at<double>(0,0);
+  fs << "Camera fy" << P1.at<double>(1,1);
+  fs << "Camera cx" << P1.at<double>(0,2);
+  fs << "Camera cy" << P1.at<double>(1,2);
+
+  fs << "Camera k1" << 0;
+  fs << "Camera k2" << 0;
+  fs << "Camera p1" << 0;
+  fs << "Camera p2" << 0;
   
   fs << "Left" << "{";
   fs << "K" << K1;
@@ -162,6 +174,7 @@ int main(int, char**)
 
   fs << "R" << R;
   fs << "T" << T;
+  fs << "Size" << std::get<0>(frame_pair).size();
   
   stop_grabbing = false;
   for(;;)
@@ -170,8 +183,8 @@ int main(int, char**)
       break;
     frame_pair = av_system.retrieveFramePair();
     cv::Mat left, right;
-    cv::undistort(frame_pair.first, left, K1, D1);
-    cv::undistort(frame_pair.second, right, K2, D2);
+    cv::undistort(std::get<0>(frame_pair), left, K1, D1);
+    cv::undistort(std::get<1>(frame_pair), right, K2, D2);
     cv::imshow("Left", left);
     cv::imshow("Right", right);
     frames.push_back(frame_pair);
